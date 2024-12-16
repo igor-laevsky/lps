@@ -1,3 +1,8 @@
+base_node_url: '...'
+aerodrome:
+  sugar: '0x51f290CCCD6a54Af00b38edDd59212dE068B8A4b'
+  nft_position_manager: '0x827922686190790b37229fd06084350E74485b72'
+
 logging:
   version: 1
   formatters:
