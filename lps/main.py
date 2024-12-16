@@ -4,6 +4,7 @@ import time
 from eth_defi.event_reader.csv_block_data_store import CSVDatasetBlockDataStore
 from eth_defi.uniswap_v3.price import get_onchain_price
 
+from lps.aerodrome import get_position_info
 from lps.utils.config import load_configuration, logging_config, get_config, \
     resources_path, data_path
 import sys
@@ -33,35 +34,6 @@ logger = logging.getLogger('main')
 from web3 import Web3
 from eth_defi.event_reader.fast_json_rpc import patch_web3
 
-@attrs.frozen
-class NftPositionInfo:
-    nonce: int
-    operator: str
-    token0: str
-    token1: str
-    tickSpacing: int
-    tickLower: int
-    tickUpper: int
-    liquidity: int
-    feeGrowthInside0LastX128: int
-    feeGrowthInside1LastX128: int
-    tokensOwed0: int
-    tokensOwed1: int
-
-@attrs.frozen
-class CLPoolSlot0:
-    sqrtPriceX96: int
-    tick: int
-    observationIndex: int
-    observationCardinality: int
-    observationCardinalityNext: int
-    unlocked: bool
-
-@lru_cache(maxsize=256)
-def fetch_pair_details_cached(web3: Web3, pair_address: str) -> TokenDetails:
-    """In-process memory cache for getting pair data in decoded format."""
-    return fetch_erc20_details(web3, pair_address)
-
 def main():
     conf = get_config()
 
@@ -72,22 +44,10 @@ def main():
     w3.middleware_onion.clear()
     install_retry_middleware(w3)
 
-    # Disable reorg detection because it's slow
-    # reorg_monitor = create_reorganisation_monitor(w3, check_depth=10)
-    # block_store = CSVDatasetBlockDataStore(data_path() / f"{w3.eth.chain_id}_block_store.csv")
-    # if not block_store.is_virgin():
-    #     df = block_store.load()
-    #     reorg_monitor.load_pandas(df)
-    #     logger.info("Loaded %d existing blocks from %s.\n", len(df), block_store.path)
-    # else:
-    #     reorg_monitor.load_initial_block_headers(10, tqdm=tqdm)
-    # block_store_delay_ns = 100 * 10**9
-    # block_store_time_ns = time.time_ns() + block_store_delay_ns
-
     block_time_sec = measure_block_time(w3)
     logger.info(f'Measured block time {block_time_sec}s')
 
-    # Graceful shotdown
+    # Graceful shutdown
     is_running = True
     def stop(signum, frame):
         nonlocal is_running
@@ -96,18 +56,13 @@ def main():
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
 
+    positions = (3899989,)
+    for pos in positions:
+        pos_info = get_position_info(w3, pos)
+        rich.print(pos_info)
+
     while is_running:
-        # chain_reorg_resolution = reorg_monitor.update_chain()
-        # start, end = chain_reorg_resolution.get_read_range()
-        # if chain_reorg_resolution.reorg_detected:
-        #     logger.warning(f"Chain reorg detected: {chain_reorg_resolution}")
-
         logger.info(f'Current block: ${w3.eth.get_block_number()}')
-
-        # if (time.time_ns() > block_store_time_ns):
-        #     logger.info('Saving block info')
-        #     block_store.save(reorg_monitor.to_pandas())
-        #     block_store_time_ns = time.time_ns() + block_store_delay_ns
 
         time.sleep(block_time_sec)
 
