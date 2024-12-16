@@ -12,6 +12,9 @@ def config_path() -> Path:
 def resources_path() -> Path:
     return importlib.resources.files("lps").parent / "resources"
 
+def data_path() -> Path:
+    return importlib.resources.files("lps").parent / "data"
+
 def load_configuration(flavor: str):
     global _CONFIG
     assert _CONFIG is None, "must be run once"
