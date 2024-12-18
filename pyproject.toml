@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "lps"
+version = "0.1.0"
+description = ""
+authors = ["Igor Laevsky <igmyrj@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+more-itertools = "^10.5.0"
+pyyaml = "^6.0.2"
+rich = "^13.9.4"
+attrs = "^24.2.0"
+cattrs = "^24.1.2"
+coloredlogs = "^15.0.1"
+attributedict = "^0.3.0"
+web3-ethereum-defi = "^0.26.1"
+pandas = "^2.2.3"
+tqdm = "^4.67.1"
+pyarrow = "^18.1.0"
+ccxt = "^4.4.40"
+hyperliquid-python-sdk = "^0.9.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[pytest]
+testpaths = "tests"
