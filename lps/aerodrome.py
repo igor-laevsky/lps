@@ -20,19 +20,56 @@ class CLPoolInfo:
     fee_pips: int
     contract: Contract
 
+    @attrs.frozen
+    class _RawCLPoolSlot0:
+        """ Raw data from the pool slot0 """
+        sqrtPriceX96: int
+        tick: int
+        observationIndex: int
+        observationCardinality: int
+        observationCardinalityNext: int
+        unlocked: bool
+
+    def _get_slot0(self, w3: Web3, block: str | int = 'latest') -> _RawCLPoolSlot0:
+        return self._RawCLPoolSlot0(
+            *self.contract.functions.slot0().call(block_identifier=block))
+
+    def get_current_tick(self, w3: Web3, block: str | int = 'latest') -> int:
+        return self._get_slot0(w3, block).tick
+
 @attrs.frozen
 class PositionInfo:
     """Internal representation of the position, collected from multiple contracts"""
-
-    # We try to resolve quote to stable coin and base to volatile when possible
-    base: TokenDetails
-    quote: TokenDetails
+    token0: TokenDetails
+    token1: TokenDetails
 
     tick_lower: int
     tick_upper: int
+    liquidity: int
 
+    nft_id: int
     pool: CLPoolInfo
-    nft_manager: Contract
+
+    def _is_price_inverted(self) -> bool:
+        if guess_is_stable_coin(self.token1):
+            return False
+        if guess_is_stable_coin(self.token0):
+            return True
+        return False # Don't know really
+
+    def match_base_quote(self, token0: any, token1: any) -> (any, any):
+        """Reorderers elements according to the base-quote guess"""
+        if self._is_price_inverted():
+            return token1, token0
+        return token0, token1
+
+    @property
+    def base(self) -> TokenDetails:
+        return self.match_base_quote(self.token0, self.token1)[0]
+
+    @property
+    def quote(self) -> TokenDetails:
+        return self.match_base_quote(self.token0, self.token1)[1]
 
 @attrs.frozen
 class _RawNftPositionInfo:
@@ -49,16 +86,6 @@ class _RawNftPositionInfo:
     feeGrowthInside1LastX128: int
     tokensOwed0: int
     tokensOwed1: int
-
-@attrs.frozen
-class _CLPoolSlot0:
-    """Raw data from the pool slot"""
-    sqrtPriceX96: int
-    tick: int
-    observationIndex: int
-    observationCardinality: int
-    observationCardinalityNext: int
-    unlocked: bool
 
 @lru_cache(maxsize=256)
 def _get_pool_info_cached(w3: Web3, token0: TokenDetails, token1: TokenDetails, tickSpacing: int) -> CLPoolInfo:
@@ -85,7 +112,8 @@ def _get_pool_info_cached(w3: Web3, token0: TokenDetails, token1: TokenDetails, 
         contract=pool_contract
     )
 
-def get_position_info(w3: Web3, nft_id: int) -> PositionInfo:
+@lru_cache(maxsize=256)
+def get_position_info_cached(w3: Web3, nft_id: int) -> PositionInfo:
     aero_nft_manager = create_contract_cached(
         w3,
         address=get_config().aerodrome.nft_position_manager,
@@ -98,13 +126,6 @@ def get_position_info(w3: Web3, nft_id: int) -> PositionInfo:
     token0_details = fetch_erc20_details_cached(w3, position_info.token0)
     token1_details = fetch_erc20_details_cached(w3, position_info.token1)
 
-    # Guess human-readable token order
-    base = token0_details
-    quote = token1_details
-    if guess_is_stable_coin(token0_details):
-        base = token1_details
-        quote = token0_details
-
     pool = _get_pool_info_cached(
         w3,
         token0_details,
@@ -112,10 +133,15 @@ def get_position_info(w3: Web3, nft_id: int) -> PositionInfo:
         position_info.tickSpacing)
 
     return PositionInfo(
-        base=base,
-        quote=quote,
+        token0=token0_details,
+        token1=token1_details,
         tick_lower=position_info.tickLower,
         tick_upper=position_info.tickUpper,
+        liquidity=position_info.liquidity,
+        nft_id=nft_id,
         pool=pool,
-        nft_manager=aero_nft_manager
     )
+
+def clear_caches():
+    get_position_info_cached.cache_clear()
+    _get_pool_info_cached.cache_clear()

@@ -1,0 +1,16 @@
+- Automatically gather all open positions
+- Alert when cex price is much different from dex price
+- Use USD as minimal order size in hl_hedger
+- Collect all stats
+
+- Place limit orders in hl connector and use less slippage
+- Add binance or bybit as hedger
+- Hedge pools where both coins are volatile
+
+- Optimize block receive delays
+- Optimize cex price reading and order placing
+
+- Use better strategy to choose pools
+- Try BNB chain (uniswap clones)
+- Try Solana
+- Copmpute markouts, investigate active strategies

@@ -1,33 +1,25 @@
-import signal
-import time
+import rich
 
-from eth_defi.event_reader.csv_block_data_store import CSVDatasetBlockDataStore
-from eth_defi.uniswap_v3.price import get_onchain_price
-
-from lps.aerodrome import get_position_info
-from lps.utils.config import load_configuration, logging_config, get_config, \
-    resources_path, data_path
+from lps.utils.config import load_configuration, logging_config, get_config
 import sys
 import logging.config
 
 load_configuration(sys.argv[1])
 logging.config.dictConfig(logging_config())
 
-from functools import lru_cache
+import signal
+import time
 
-import attrs
+from lps.aerodrome import get_position_info_cached, clear_caches
+from lps.connectors import hl
+from lps.utils import v3_math
+from lps import hl_hedger
+
 import requests
-import rich
-from eth_defi.abi import get_contract, get_deployed_contract
-from eth_defi.chain import install_chain_middleware, install_retry_middleware
+from decimal import Decimal
+
+from eth_defi.chain import install_retry_middleware
 from eth_defi.event_reader.block_time import measure_block_time
-from eth_defi.event_reader.reorganisation_monitor import \
-    JSONRPCReorganisationMonitor, create_reorganisation_monitor
-from eth_defi.token import fetch_erc20_details, TokenDetails
-from eth_defi.uniswap_v2.pair import fetch_pair_details
-from eth_defi.uniswap_v3.deployment import fetch_deployment
-from eth_defi.uniswap_v3.swap import swap_with_slippage_protection
-from tqdm import tqdm
 
 logger = logging.getLogger('main')
 
@@ -36,6 +28,7 @@ from eth_defi.event_reader.fast_json_rpc import patch_web3
 
 def main():
     conf = get_config()
+    hl.start()
 
     session = requests.Session()
     w3 = Web3(Web3.HTTPProvider(conf.base_node_url, session=session))
@@ -49,20 +42,35 @@ def main():
 
     # Graceful shutdown
     is_running = True
-    def stop(signum, frame):
+    def stop(_, __):
         nonlocal is_running
         is_running = False
-        logger.info(f'Received {signum}, exiting')
+        logger.info('Received signal, exiting')
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
 
-    positions = (3899989,)
-    for pos in positions:
-        pos_info = get_position_info(w3, pos)
-        rich.print(pos_info)
+    # Load position info
+    tracked_positions = (4205404,)
+    tracked_position_infos = []
+    for pos in tracked_positions:
+        tracked_position_infos.append(get_position_info_cached(w3, pos))
 
     while is_running:
-        logger.info(f'Current block: ${w3.eth.get_block_number()}')
+        block = w3.eth.get_block('latest')
+        logger.info(f'Current block: {block["number"]} delay {time.time() - block["timestamp"]}s')
+
+        for pos in tracked_position_infos:
+            current_tick = pos.pool.get_current_tick(w3)
+            hl_hedger.adjust_hedge(pos, current_tick)
+
+            # current_tick = pos.pool.get_current_tick(w3)
+            # (amount0, amount1) = v3_math.get_amounts_at_tick(
+            #     pos.tick_lower, pos.tick_upper, pos.liquidity, current_tick)
+            #
+            # amount0_readable = amount0 / 10**pos.token0.decimals
+            # amount1_readable = amount1 / 10**pos.token1.decimals
+            #
+            # logger.info(f'{pos.nft_id}\t{amount0_readable}\t{amount1_readable}\t')
 
         time.sleep(block_time_sec)
 
