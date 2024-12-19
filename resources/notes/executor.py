@@ -45,62 +45,63 @@ print (exchange.id, 'market price', { 'bid': bid, 'ask': ask, 'spread': spread }
 
 
 # TODO: This should be unit test
-#
-# pos = PositionInfo(
-#     token0=erc20.fetch_erc20_details_cached(w3, '0x4200000000000000000000000000000000000006'),
-#     token1=erc20.fetch_erc20_details_cached(w3, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
-#     tick_lower=-194200,
-#     tick_upper=-192600,
-#     liquidity=180540158377974,
-#     nft_id=3899989,
-#     pool=CLPoolInfo(
-#         token0=erc20.fetch_erc20_details_cached(w3, '0x4200000000000000000000000000000000000006'),
-#         token1=erc20.fetch_erc20_details_cached(w3, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
-#         tick_spacing=100,
-#         fee_pips=400,
-#         contract=None
-#     ),
-# )
 
-# print('Start in the middle')
-# hl_hedger.adjust_hedge(pos, -193400)
-# input()
-#
-# print('Outside lower bound')
-# hl_hedger.adjust_hedge(pos, -194500)
-# input()
-#
-# print('Still outside')
-# hl_hedger.adjust_hedge(pos, -194300)
-# input()
-#
-# print('On the lower endge')
-# hl_hedger.adjust_hedge(pos, -194200)
-# input()
-#
-# print('In the middle')
-# hl_hedger.adjust_hedge(pos, -193400)
-# input()
-#
-# print('Small change')
-# hl_hedger.adjust_hedge(pos, -193410)
-# input()
-#
-# print('Some change')
-# hl_hedger.adjust_hedge(pos, -193500)
-# input()
-#
-# print('Close to the upper edge')
-# hl_hedger.adjust_hedge(pos, -192500)
-# input()
-#
-# print('On the upper edge')
-# hl_hedger.adjust_hedge(pos, -192600)
-# input()
-#
-# print('Upper overflow')
-# hl_hedger.adjust_hedge(pos, -19300)
-# input()
+pos = PositionInfo(
+    token0=erc20.fetch_erc20_details_cached(w3, '0x4200000000000000000000000000000000000006'),
+    token1=erc20.fetch_erc20_details_cached(w3, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
+    tick_lower=-194200,
+    tick_upper=-192600,
+    liquidity=180540158377974,
+    nft_id=3899989,
+    pool=CLPoolInfo(
+        token0=erc20.fetch_erc20_details_cached(w3, '0x4200000000000000000000000000000000000006'),
+        token1=erc20.fetch_erc20_details_cached(w3, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
+        tick_spacing=100,
+        fee_pips=400,
+        contract=None
+    ),
+)
+
+print('Start in the middle')
+hl_hedger.adjust_hedge(pos, -193400)
+
+input()
+
+print('Outside lower bound')
+hl_hedger.adjust_hedge(pos, -194500)
+input()
+
+print('Still outside')
+hl_hedger.adjust_hedge(pos, -194300)
+input()
+
+print('On the lower endge')
+hl_hedger.adjust_hedge(pos, -194200)
+input()
+
+print('In the middle')
+hl_hedger.adjust_hedge(pos, -193400)
+input()
+
+print('Small change')
+hl_hedger.adjust_hedge(pos, -193410)
+input()
+
+print('Some change')
+hl_hedger.adjust_hedge(pos, -193500)
+input()
+
+print('Close to the upper edge')
+hl_hedger.adjust_hedge(pos, -192500)
+input()
+
+print('On the upper edge')
+hl_hedger.adjust_hedge(pos, -192600)
+input()
+
+print('Upper overflow')
+hl_hedger.adjust_hedge(pos, -19300)
+input()
 
 
 # info = Info(constants.MAINNET_API_URL, skip_ws=True)

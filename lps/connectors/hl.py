@@ -20,22 +20,17 @@ _hl_exchange: Exchange | None = None
 _public_addr: str | None = None
 
 @attrs.frozen
-class _HLConnection:
+class HL:
     info: Info
     exchange: Exchange
     public_addr: str
 
     sz_decimals: dict[str, int] # cached szDecimals for perps only so far
 
-_hl_connection: _HLConnection | None = None
-
 class HLException(Exception):
     pass
 
-def start():
-    global _hl_connection
-    assert _hl_connection is None
-
+def start() -> HL:
     logger.info('Starting')
 
     if get_config().hyperliquid.use_testnet:
@@ -47,6 +42,7 @@ def start():
         public_addr = get_config().hyperliquid.main.wallet_address
         private_key = get_config().hyperliquid.main.private_key
 
+    logger.info('Loading meta')
     info = Info(api_url, skip_ws=True)
 
     account: LocalAccount = eth_account.Account.from_key(private_key)
@@ -54,26 +50,29 @@ def start():
                         api_url,
                         account_address=get_config().hyperliquid.testnet.wallet_address)
 
+    logger.info('Loading sz decimals')
     sz_decimals = {m['name']: m['szDecimals'] for m in info.meta()['universe']}
 
-    _hl_connection = _HLConnection(
+    hl_connection = HL(
         info=info,
         sz_decimals=sz_decimals,
         exchange=exchange,
         public_addr=public_addr)
 
+    logger.info('Updating leverages')
     for coin, leverage in get_config().hyperliquid.leverages.items():
         exchange.update_leverage(leverage, coin)
 
     logger.info('Started')
 
+    return hl_connection
+
 class HLPosition(TypedDict, total=False):
     positionValue: str
     szi: str
 
-def get_user_positions() -> dict[str, HLPosition]:
-    assert _hl_connection is not None
-    positions = _hl_connection.info.user_state(_hl_connection.public_addr)['assetPositions']
+def get_user_positions(hl: HL) -> dict[str, HLPosition]:
+    positions = hl.info.user_state(hl.public_addr)['assetPositions']
 
     ret: dict[str, HLPosition] = {}
     for pos in map(itemgetter('position'), positions):
@@ -81,19 +80,19 @@ def get_user_positions() -> dict[str, HLPosition]:
         ret[pos['coin']] = pos
     return ret
 
-def round_sz(size: Decimal, name: str) -> Decimal:
+def round_sz(hl: HL, size: Decimal, name: str) -> Decimal:
     """
     Correctly round asset size according to the HL meta info
     """
-    return round(size, _hl_connection.sz_decimals[name])
+    return round(size, hl.sz_decimals[name])
 
-def adjust_position(name: str, from_size: Decimal, to_size: Decimal):
+def adjust_position(hl: HL, name: str, from_size: Decimal, to_size: Decimal):
     """
     Note: from_size should equal to the current position size
     """
-    assert name in _hl_connection.info.name_to_coin
+    assert name in hl.info.name_to_coin
 
-    diff = round_sz(to_size - from_size, name)
+    diff = round_sz(hl, to_size - from_size, name)
     if diff == 0:
         return
 
@@ -103,7 +102,7 @@ def adjust_position(name: str, from_size: Decimal, to_size: Decimal):
         try:
             sz = float(abs(diff))
             logger.info(f'Posting order {name} {diff} {sz}')
-            order = _hl_connection.exchange.market_open(
+            order = hl.exchange.market_open(
                 name=name,
                 is_buy=diff > 0,
                 sz=sz,

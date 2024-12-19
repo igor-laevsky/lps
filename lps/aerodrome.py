@@ -33,7 +33,7 @@ class CLPoolInfo:
         observationCardinalityNext: int
         unlocked: bool
 
-    def get_slot0(self, w3: Web3, block: str | int = 'latest') -> Slot0:
+    def get_slot0(self, _: Web3, block: str | int = 'latest') -> Slot0:
         return self.Slot0(
             *self.contract.functions.slot0().call(block_identifier=block))
 
@@ -78,7 +78,7 @@ class PositionInfo:
     pool: CLPoolInfo
 
     def match_base_quote(self, token0: any, token1: any) -> (any, any):
-        """Reorderers elements according to the base-quote guess"""
+        """Reorders elements according to the base-quote guess"""
         return self.pool.match_base_quote(token0, token1)
 
     @property
@@ -114,7 +114,12 @@ class _RawNftPositionInfo:
     tokensOwed1: int
 
 @lru_cache(maxsize=256)
-def _get_pool_info_cached(w3: Web3, token0: TokenDetails, token1: TokenDetails, tickSpacing: int) -> CLPoolInfo:
+def _get_pool_info_cached(
+        w3: Web3,
+        token0: TokenDetails,
+        token1: TokenDetails,
+        tickSpacing: int) -> CLPoolInfo:
+
     cl_factory = create_contract_cached(
         w3,
         address=get_config().aerodrome.cl_factory,

@@ -32,7 +32,7 @@ logger = logging.getLogger('main')
 def main():
     conf = get_config()
 
-    hl.start()
+    a_hl = hl.start()
 
     a_binance = binance.start()
 
@@ -86,7 +86,7 @@ def main():
                 logger.warning('CEX<->DEX price arbitrage possibility')
 
             current_tick = slot0.tick
-            hl_hedger.adjust_hedge(pos, current_tick)
+            hl_hedger.adjust_hedge(a_hl, pos, current_tick)
 
             # current_tick = pos.pool.get_current_tick(w3)
             # (amount0, amount1) = v3_math.get_amounts_at_tick(
