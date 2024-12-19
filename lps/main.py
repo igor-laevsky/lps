@@ -71,22 +71,21 @@ def main():
         block = w3.eth.get_block('latest')
         logger.info(f'Current block: {block["number"]} delay {time.time() - block["timestamp"]:.2f}s')
 
-        for pos in tracked_positions:
-            slot0 = pos.pool.get_slot0(w3, block=block['number'])
-
-            pool_price = pos.pool.human_price(slot0.sqrtPriceX96)
-            logger.info(f'Pool price is {pool_price:.2f}')
-            binance_price = binance.mid_price(
-                a_binance,
-                erc20.canonic_symbol(pos.base.symbol),
-                erc20.canonic_symbol(pos.quote.symbol))
-            diff = abs(pool_price - binance_price) / pool_price * 100
-            logger.info(f'Binance mid price: {binance_price:.2f} diff vs dex {diff:.4f}%')
-            if diff > pos.pool.fee_pips / 10000:
-                logger.warning('CEX<->DEX price arbitrage possibility')
-
-            current_tick = slot0.tick
-            hl_hedger.adjust_hedge(a_hl, pos, current_tick)
+        # ticks = []
+        # for pos in tracked_positions:
+        #     slot0 = pos.pool.get_slot0(w3, block=block['number'])
+        #     ticks.append(slot0.tick)
+        #
+        #     pool_price = pos.pool.human_price(slot0.sqrtPriceX96)
+        #     logger.info(f'Pool price is {pool_price:.2f}')
+        #     binance_price = binance.mid_price(
+        #         a_binance,
+        #         erc20.canonic_symbol(pos.base.symbol),
+        #         erc20.canonic_symbol(pos.quote.symbol))
+        #     diff = abs(pool_price - binance_price) / pool_price * 100
+        #     logger.info(f'Binance mid price: {binance_price:.2f} diff vs dex {diff:.4f}%')
+        #     if diff > pos.pool.fee_pips / 10000:
+        #         logger.warning('CEX<->DEX price arbitrage possibility')
 
             # current_tick = pos.pool.get_current_tick(w3)
             # (amount0, amount1) = v3_math.get_amounts_at_tick(
@@ -96,6 +95,15 @@ def main():
             # amount1_readable = amount1 / 10**pos.token1.decimals
             #
             # logger.info(f'{pos.nft_id}\t{amount0_readable}\t{amount1_readable}\t')
+
+        ticks = list(
+            map(lambda pos: pos.pool.get_slot0(w3, block=block['number']).tick,
+                tracked_positions))
+        logger.info(f'Current ticks: {ticks}')
+
+        hedges = hl_hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
+        adjustments = hl_hedger.compute_hedge_adjustments(a_hl, hedges)
+        hl_hedger.execute_hedge_adjustements(a_hl, adjustments)
 
         time.sleep(block_time_sec)
 

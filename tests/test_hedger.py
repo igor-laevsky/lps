@@ -31,7 +31,7 @@ def test_hedge_single_pos_not_inverse(base_w3: Web3, hl_connector: HL):
     # TODO: this is no good, but I'm too lazy to mock HL
     def do(tick):
         hedges = hl_hedger.compute_hedges([(pos, tick)])
-        updates = hl_hedger.compute_hedge_adjustements(hl_connector, hedges)
+        updates = hl_hedger.compute_hedge_adjustments(hl_connector, hedges)
         hl_hedger.execute_hedge_adjustements(hl_connector, updates)
         return len(updates)
 

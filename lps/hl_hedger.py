@@ -3,6 +3,7 @@ import logging
 from collections import defaultdict
 from itertools import groupby, chain
 from operator import itemgetter
+from typing import Sequence, Iterable, Tuple
 
 import attrs
 from decimal import Decimal
@@ -101,7 +102,7 @@ def _get_hedge_symbol_for_token(token: TokenDetails) -> str:
     # exact coin traded on the given perps exchange.
     return erc20.canonic_symbol(token.symbol)
 
-def compute_hedges(positions: list[(PositionInfo, int)]) -> dict[str, Decimal]:
+def compute_hedges(positions: Iterable[Tuple[PositionInfo, int]]) -> dict[str, Decimal]:
     """
     Given list of positions and their corresponding ticks (pos, tick)
     compute optimal set of perp shorts for hedging.
@@ -121,7 +122,7 @@ def compute_hedges(positions: list[(PositionInfo, int)]) -> dict[str, Decimal]:
     logger.debug(f'Optimal hedge sizes: {ret}')
     return ret
 
-def compute_hedge_adjustements(a_hl: HL, optimal_hedges: dict[str, Decimal]) -> dict[str, (Decimal, Decimal)]:
+def compute_hedge_adjustments(a_hl: HL, optimal_hedges: dict[(str, Decimal)]) -> dict[str, (Decimal, Decimal)]:
     """
     Given map symbol -> optimal hedge size, compute map:
         symbol -> (old position size, new position size)
@@ -179,4 +180,5 @@ def execute_hedge_adjustements(a_hl: HL, hedge_adjustements: dict[str, (Decimal,
             logger.warning(f'Failed to update hedge position {symbol, old_position_size, new_position_size}')
             continue
 
-    logger.info(f'Updated {updated_count} hedges')
+    if len(hedge_adjustements) > 0:
+        logger.info(f'Updated {updated_count} hedges')
