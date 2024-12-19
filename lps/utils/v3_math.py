@@ -9,6 +9,7 @@ for the description of the purpose of this code.
 from decimal import Decimal
 
 TICK_BASE = Decimal('1.0001')
+Q96 = Decimal(0x1000000000000000000000000)
 
 def tick_to_price(tick: int) -> Decimal:
     return TICK_BASE ** tick
@@ -98,11 +99,14 @@ def get_amounts_at_tick(tick_lower: int, tick_upper: int, liquidity: int, tick_c
     sb = tick_to_sqrt_price(tick_upper)
 
     if tick_current <= tick_lower:
-        return 0, liquidity * (sb - sa)
+        return liquidity * (sb - sa) / (sa * sb), 0
     elif tick_lower < tick_current < tick_upper:
         return (
             liquidity * (sb - current_sqrt_price) / (current_sqrt_price * sb),
             liquidity * (current_sqrt_price - sa)
         )
     else:
-        return liquidity * (sb - sa) / (sa * sb), 0
+        return 0, liquidity * (sb - sa)
+
+def sqrtprice_to_human(sqrtPriceX96: int, token0_decimals: int, token1_decimals: int) -> Decimal:
+    return ((Decimal(sqrtPriceX96) / Q96) ** 2) / Decimal(10**(token1_decimals - token0_decimals))

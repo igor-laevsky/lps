@@ -13,7 +13,7 @@ import time
 from lps.aerodrome import get_position_info_cached, clear_caches
 from lps.connectors import hl
 from lps.utils import v3_math
-from lps import hl_hedger
+from lps import hl_hedger, erc20
 
 import requests
 from decimal import Decimal
@@ -21,14 +21,20 @@ from decimal import Decimal
 from eth_defi.chain import install_retry_middleware
 from eth_defi.event_reader.block_time import measure_block_time
 
-logger = logging.getLogger('main')
-
 from web3 import Web3
 from eth_defi.event_reader.fast_json_rpc import patch_web3
 
+from lps.connectors import binance
+
+logger = logging.getLogger('main')
+
+
 def main():
     conf = get_config()
+
     hl.start()
+
+    a_binance = binance.start()
 
     session = requests.Session()
     w3 = Web3(Web3.HTTPProvider(conf.base_node_url, session=session))
@@ -50,17 +56,36 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Load position info
-    tracked_positions = (4205404,)
-    tracked_position_infos = []
-    for pos in tracked_positions:
-        tracked_position_infos.append(get_position_info_cached(w3, pos))
+    tracked_position_ids = (4205404,)
+    tracked_positions = []
+    for pos in tracked_position_ids:
+        pos = get_position_info_cached(w3, pos)
+        tracked_positions.append(pos)
+        rich.print(pos)
+
+    if not hl_hedger.is_hedgable(tracked_positions):
+        logger.warning("Can't hedge all of the positions, exiting")
+        sys.exit(0)
 
     while is_running:
         block = w3.eth.get_block('latest')
-        logger.info(f'Current block: {block["number"]} delay {time.time() - block["timestamp"]}s')
+        logger.info(f'Current block: {block["number"]} delay {time.time() - block["timestamp"]:.2f}s')
 
-        for pos in tracked_position_infos:
-            current_tick = pos.pool.get_current_tick(w3)
+        for pos in tracked_positions:
+            slot0 = pos.pool.get_slot0(w3, block=block['number'])
+
+            pool_price = pos.pool.human_price(slot0.sqrtPriceX96)
+            logger.info(f'Pool price is {pool_price:.2f}')
+            binance_price = binance.mid_price(
+                a_binance,
+                erc20.canonic_symbol(pos.base.symbol),
+                erc20.canonic_symbol(pos.quote.symbol))
+            diff = abs(pool_price - binance_price) / pool_price * 100
+            logger.info(f'Binance mid price: {binance_price:.2f} diff vs dex {diff:.4f}%')
+            if diff > pos.pool.fee_pips / 10000:
+                logger.warning('CEX<->DEX price arbitrage possibility')
+
+            current_tick = slot0.tick
             hl_hedger.adjust_hedge(pos, current_tick)
 
             # current_tick = pos.pool.get_current_tick(w3)

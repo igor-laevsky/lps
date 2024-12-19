@@ -1,7 +1,8 @@
-- Automatically gather all open positions
 - Alert when cex price is much different from dex price
 - Use USD as minimal order size in hl_hedger
+- Review uv3 math
 - Collect all stats
+- Write tests for the hedger (from executor.py)
 
 - Place limit orders in hl connector and use less slippage
 - Add binance or bybit as hedger
@@ -14,3 +15,7 @@
 - Try BNB chain (uniswap clones)
 - Try Solana
 - Copmpute markouts, investigate active strategies
+
+Later:
+- Automatically gather all open positions
+- Support multiple positions for single volatile currency

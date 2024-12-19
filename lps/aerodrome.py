@@ -8,7 +8,10 @@ from web3.contract import Contract
 
 from lps.contracts import create_contract_cached
 from lps.erc20 import fetch_erc20_details_cached, guess_is_stable_coin
+from lps.utils import v3_math
 from lps.utils.config import resources_path, get_config
+
+from decimal import Decimal
 
 logger = logging.getLogger('aero')
 
@@ -21,7 +24,7 @@ class CLPoolInfo:
     contract: Contract
 
     @attrs.frozen
-    class _RawCLPoolSlot0:
+    class Slot0:
         """ Raw data from the pool slot0 """
         sqrtPriceX96: int
         tick: int
@@ -30,25 +33,9 @@ class CLPoolInfo:
         observationCardinalityNext: int
         unlocked: bool
 
-    def _get_slot0(self, w3: Web3, block: str | int = 'latest') -> _RawCLPoolSlot0:
-        return self._RawCLPoolSlot0(
+    def get_slot0(self, w3: Web3, block: str | int = 'latest') -> Slot0:
+        return self.Slot0(
             *self.contract.functions.slot0().call(block_identifier=block))
-
-    def get_current_tick(self, w3: Web3, block: str | int = 'latest') -> int:
-        return self._get_slot0(w3, block).tick
-
-@attrs.frozen
-class PositionInfo:
-    """Internal representation of the position, collected from multiple contracts"""
-    token0: TokenDetails
-    token1: TokenDetails
-
-    tick_lower: int
-    tick_upper: int
-    liquidity: int
-
-    nft_id: int
-    pool: CLPoolInfo
 
     def _is_price_inverted(self) -> bool:
         if guess_is_stable_coin(self.token1):
@@ -58,7 +45,7 @@ class PositionInfo:
         return False # Don't know really
 
     def match_base_quote(self, token0: any, token1: any) -> (any, any):
-        """Reorderers elements according to the base-quote guess"""
+        """Reorders elements according to the base-quote guess"""
         if self._is_price_inverted():
             return token1, token0
         return token0, token1
@@ -70,6 +57,45 @@ class PositionInfo:
     @property
     def quote(self) -> TokenDetails:
         return self.match_base_quote(self.token0, self.token1)[1]
+
+    def human_price(self, sqrtPriceX96: int) -> Decimal:
+        p = v3_math.sqrtprice_to_human(
+            sqrtPriceX96,
+            self.token0.decimals,
+            self.token1.decimals)
+        if self._is_price_inverted():
+            return 1 / p
+        return p
+
+@attrs.frozen
+class PositionInfo:
+    """Internal representation of the position, collected from multiple contracts"""
+    tick_lower: int
+    tick_upper: int
+    liquidity: int
+
+    nft_id: int
+    pool: CLPoolInfo
+
+    def match_base_quote(self, token0: any, token1: any) -> (any, any):
+        """Reorderers elements according to the base-quote guess"""
+        return self.pool.match_base_quote(token0, token1)
+
+    @property
+    def token0(self):
+        return self.pool.token0
+
+    @property
+    def token1(self):
+        return self.pool.token1
+
+    @property
+    def base(self) -> TokenDetails:
+        return self.pool.base
+
+    @property
+    def quote(self) -> TokenDetails:
+        return self.pool.quote
 
 @attrs.frozen
 class _RawNftPositionInfo:
@@ -133,14 +159,18 @@ def get_position_info_cached(w3: Web3, nft_id: int) -> PositionInfo:
         position_info.tickSpacing)
 
     return PositionInfo(
-        token0=token0_details,
-        token1=token1_details,
         tick_lower=position_info.tickLower,
         tick_upper=position_info.tickUpper,
         liquidity=position_info.liquidity,
         nft_id=nft_id,
         pool=pool,
     )
+
+def all_user_positions(addr: str) -> list[PositionInfo]:
+    """ Note: only accounts for the staked positions """
+    # Needs indexing or can use alchemy_getAssetTransfers to see al nft transfers
+    # Or query all gauges on-by-one. Easier to write nft id's by hand for now.
+    raise Exception("Not implemented")
 
 def clear_caches():
     get_position_info_cached.cache_clear()

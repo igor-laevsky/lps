@@ -26,8 +26,23 @@ from hyperliquid.exchange import Exchange
 
 from lps.connectors import hl
 
-hl.start()
-w3 = Web3(Web3.HTTPProvider(get_config().base_node_url))
+# hl.start()
+# w3 = Web3(Web3.HTTPProvider(get_config().base_node_url))
+
+
+# How to get market price from binance
+exchange = ccxt.binance({
+    'apiKey': get_config().binance.main.api_key,
+    'secret': get_config().binance.main.api_secret,
+})
+
+exchange.load_markets()
+orderbook = exchange.fetch_order_book('ETH/USD')
+bid = orderbook['bids'][0][0] if len (orderbook['bids']) > 0 else None
+ask = orderbook['asks'][0][0] if len (orderbook['asks']) > 0 else None
+spread = (ask - bid) if (bid and ask) else None
+print (exchange.id, 'market price', { 'bid': bid, 'ask': ask, 'spread': spread })
+
 
 # TODO: This should be unit test
 #

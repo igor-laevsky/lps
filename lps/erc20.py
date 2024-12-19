@@ -11,3 +11,14 @@ def fetch_erc20_details_cached(web3: Web3, pair_address: str) -> TokenDetails:
 def guess_is_stable_coin(token: TokenDetails) -> bool:
     """Best guess if this is a stable coin"""
     return token.symbol in ('USDC', 'USDT', 'DAI', 'USDe', 'USDS', 'PYUSD')
+
+_SYNONYMS = {
+    'WETH': 'ETH',
+    'cbBTC': 'BTC',
+    'tBTC': 'BTC'
+}
+
+def canonic_symbol(symbol: str) -> str:
+    if symbol in _SYNONYMS:
+        return _SYNONYMS[symbol]
+    return symbol
