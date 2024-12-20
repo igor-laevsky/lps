@@ -19,6 +19,8 @@ tqdm = "^4.67.1"
 pyarrow = "^18.1.0"
 ccxt = "^4.4.40"
 hyperliquid-python-sdk = "^0.9.0"
+dune-client = "^1.7.7"
+rusty-rlp = "^0.4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"

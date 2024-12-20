@@ -1,6 +1,6 @@
 import logging
 from operator import itemgetter
-from typing import TypedDict
+from typing import TypedDict, Iterator
 from decimal import Decimal
 
 import attrs
@@ -80,6 +80,10 @@ def get_user_positions(hl: HL) -> dict[str, HLPosition]:
         ret[pos['coin']] = pos
     return ret
 
+def get_mid_prices(hl: HL, *names: list[str]) -> dict[str, Decimal]:
+    mids = hl.info.all_mids()
+    return {name: Decimal(mids[name]) for name in names}
+
 def round_sz(hl: HL, size: Decimal, name: str) -> Decimal:
     """
     Correctly round asset size according to the HL meta info
@@ -110,9 +114,9 @@ def adjust_position(hl: HL, name: str, from_size: Decimal, to_size: Decimal):
             )
             logger.info(f'Executed order: {order}')
             if order['response']['data']['statuses'][0]['filled']['totalSz'] != str(sz):
-                logger.info(f'Retrying {retry_cnt}')
-                retry_cnt += 1
-                continue
+                # TODO: Execute remaining amount
+                # For now it's fine because we will re-execute on the next hedging update
+                logger.warning(f'Failed to execute full order {order}')
             return
         except Exception as e:
             logger.exception(f'Failed to execute order: {e} {retry_cnt}')

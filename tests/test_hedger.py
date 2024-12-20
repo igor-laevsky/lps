@@ -1,3 +1,4 @@
+import rich
 from web3 import Web3
 from decimal import Decimal
 
@@ -32,8 +33,8 @@ def test_hedge_single_pos_not_inverse(base_w3: Web3, hl_connector: HL):
     def do(tick):
         hedges = hl_hedger.compute_hedges([(pos, tick)])
         updates = hl_hedger.compute_hedge_adjustments(hl_connector, hedges)
-        hl_hedger.execute_hedge_adjustements(hl_connector, updates)
-        return len(updates)
+        updated_cnt = hl_hedger.execute_hedge_adjustements(hl_connector, updates)
+        return updated_cnt
 
     # Start in the middle
     do(-193400)
@@ -80,3 +81,59 @@ def test_hedge_single_pos_not_inverse(base_w3: Web3, hl_connector: HL):
     # Upper overflow
     cnt = do(-192600)
     assert cnt == 0
+
+def test_hedge_single_pos_two_volatiles(base_w3: Web3, hl_connector: HL):
+    # This doesn't work very good because there is no liquidity on the test net
+    # Need to mock HL in order to properly test
+    # VIRTUAL/WETH
+    pos = PositionInfo(
+        tick_lower=-73400,
+        tick_upper=-72800,
+        liquidity=596712693584385284352,
+        nft_id=3899989,
+        pool=CLPoolInfo(
+            token0=erc20.fetch_erc20_details_cached(base_w3, '0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b'),
+            token1=erc20.fetch_erc20_details_cached(base_w3, '0x4200000000000000000000000000000000000006'),
+            tick_spacing=200,
+            fee_pips=2700,
+            contract=create_contract_cached(
+                base_w3,
+                address=str('0xc200f21efe67c7f41b81a854c26f9cda80593065'),
+                abi_fname="aerodrome_cl_pool.json",
+            )
+        ),
+    )
+
+    # TODO: this is no good, but I'm too lazy to mock HL
+    def do(tick):
+        hedges = hl_hedger.compute_hedges([(pos, tick)])
+        rich.print(hedges)
+        updates = hl_hedger.compute_hedge_adjustments(hl_connector, hedges)
+        rich.print(updates)
+
+        updated_cnt = hl_hedger.execute_hedge_adjustements(hl_connector, updates)
+        return updated_cnt
+
+    # In the middle
+    print('middle')
+    cnt = do(-73100)
+    #assert hl.get_user_positions(hl_connector).get('ETH', {'szi': '0'})['szi'] == '-0.2298'
+    #assert hl.get_user_positions(hl_connector).get('VIRTUAL', {'szi': '0'})['szi'] == '-343.4'
+    #assert cnt == 2
+
+    # Lower overflow
+    print('lower')
+    cnt = do(-73400)
+    # assert cnt == 2
+    # assert hl.get_user_positions(hl_connector).get('ETH', {'szi': '0'})['szi'] == '0'
+    # assert hl.get_user_positions(hl_connector).get('VIRTUAL', {'szi': '0'})['szi'] == '-343.4'
+
+    # Upper overflow
+    print('upper')
+    cnt = do(-72800)
+    # assert cnt == 2
+    # assert hl.get_user_positions(hl_connector).get('ETH', {'szi': '0'})['szi'] == '0'
+    # assert hl.get_user_positions(hl_connector).get('VIRTUAL', {'szi': '0'})['szi'] == '--692.1'
+
+def test_hedge_multi_pos_many_volatiles(base_w3: Web3, hl_connector: HL):
+    pass # TODO

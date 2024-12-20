@@ -29,19 +29,20 @@ from lps.connectors import binance
 logger = logging.getLogger('main')
 
 
-def main():
-    conf = get_config()
-
-    a_hl = hl.start()
-
-    a_binance = binance.start()
-
+def create_base_web3() -> Web3:
     session = requests.Session()
-    w3 = Web3(Web3.HTTPProvider(conf.base_node_url, session=session))
+    w3 = Web3(Web3.HTTPProvider(get_config().base_node_url, session=session))
     patch_web3(w3)
 
     w3.middleware_onion.clear()
     install_retry_middleware(w3)
+    return w3
+
+
+def main():
+    w3 = create_base_web3()
+    a_hl = hl.start()
+    #a_binance = binance.start()
 
     block_time_sec = measure_block_time(w3)
     logger.info(f'Measured block time {block_time_sec}s')
@@ -56,21 +57,34 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Load position info
-    tracked_position_ids = (4205404,)
+    tracked_position_ids = (4329232,)
     tracked_positions = []
     for pos in tracked_position_ids:
         pos = get_position_info_cached(w3, pos)
         tracked_positions.append(pos)
         rich.print(pos)
 
-    if not hl_hedger.is_hedgable(tracked_positions):
-        logger.warning("Can't hedge all of the positions, exiting")
-        sys.exit(0)
-
     while is_running:
         block = w3.eth.get_block('latest')
-        logger.info(f'Current block: {block["number"]} delay {time.time() - block["timestamp"]:.2f}s')
+        logger.info(f'Current block: {block["number"]} '
+                    f'delay {time.time() - block["timestamp"]:.2f}s')
 
+        try:
+            ticks = list(
+                map(lambda pos: pos.pool.get_slot0(w3, block=block['number']).tick,
+                    tracked_positions))
+            logger.info(f'Current ticks: {ticks}')
+
+            hedges = hl_hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
+            adjustments = hl_hedger.compute_hedge_adjustments(a_hl, hedges)
+            hl_hedger.execute_hedge_adjustements(a_hl, adjustments)
+        except Exception:
+            logger.exception('Failed somewhere')
+            logger.warning('Re-creating all connections just in case')
+            w3 = create_base_web3()
+            a_hl = hl.start()
+
+        # CEX->DEX price diff
         # ticks = []
         # for pos in tracked_positions:
         #     slot0 = pos.pool.get_slot0(w3, block=block['number'])
@@ -86,24 +100,6 @@ def main():
         #     logger.info(f'Binance mid price: {binance_price:.2f} diff vs dex {diff:.4f}%')
         #     if diff > pos.pool.fee_pips / 10000:
         #         logger.warning('CEX<->DEX price arbitrage possibility')
-
-            # current_tick = pos.pool.get_current_tick(w3)
-            # (amount0, amount1) = v3_math.get_amounts_at_tick(
-            #     pos.tick_lower, pos.tick_upper, pos.liquidity, current_tick)
-            #
-            # amount0_readable = amount0 / 10**pos.token0.decimals
-            # amount1_readable = amount1 / 10**pos.token1.decimals
-            #
-            # logger.info(f'{pos.nft_id}\t{amount0_readable}\t{amount1_readable}\t')
-
-        ticks = list(
-            map(lambda pos: pos.pool.get_slot0(w3, block=block['number']).tick,
-                tracked_positions))
-        logger.info(f'Current ticks: {ticks}')
-
-        hedges = hl_hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
-        adjustments = hl_hedger.compute_hedge_adjustments(a_hl, hedges)
-        hl_hedger.execute_hedge_adjustements(a_hl, adjustments)
 
         time.sleep(block_time_sec)
 
