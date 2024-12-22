@@ -1,5 +1,6 @@
 import rich
 
+from connectors.base import create_base_web3
 from lps.utils.config import load_configuration, logging_config, get_config
 import sys
 import logging.config
@@ -12,32 +13,13 @@ import time
 
 from lps.aerodrome import get_position_info_cached, clear_caches
 from lps.connectors import hl
-from lps.utils import v3_math
 from lps import hl_hedger, erc20
 
-import requests
-from decimal import Decimal
-
-from eth_defi.chain import install_retry_middleware
 from eth_defi.event_reader.block_time import measure_block_time
-
-from web3 import Web3
-from eth_defi.event_reader.fast_json_rpc import patch_web3
 
 from lps.connectors import binance
 
 logger = logging.getLogger('main')
-
-
-def create_base_web3() -> Web3:
-    session = requests.Session()
-    w3 = Web3(Web3.HTTPProvider(get_config().base_node_url, session=session))
-    patch_web3(w3)
-
-    w3.middleware_onion.clear()
-    install_retry_middleware(w3)
-    return w3
-
 
 def main():
     w3 = create_base_web3()
@@ -57,7 +39,7 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Load position info
-    tracked_position_ids = (4329232,)
+    tracked_position_ids = (4374315,)
     tracked_positions = []
     for pos in tracked_position_ids:
         pos = get_position_info_cached(w3, pos)
@@ -80,9 +62,20 @@ def main():
             hl_hedger.execute_hedge_adjustements(a_hl, adjustments)
         except Exception:
             logger.exception('Failed somewhere')
-            logger.warning('Re-creating all connections just in case')
-            w3 = create_base_web3()
-            a_hl = hl.start()
+            logger.warning('Re-creating all connections in 10 seconds')
+
+            # Assume that one of the connections is malfunctioning
+            # It will probably take some time until it recovers
+            while is_running:
+                try:
+                    time.sleep(10)
+                    w3 = create_base_web3()
+                    a_hl = hl.start()
+                    break
+                except Exception:
+                    logger.exception("Failed while re-creating connections")
+                    logger.warning("Retrying in 10 seconds")
+                    continue
 
         # CEX->DEX price diff
         # ticks = []

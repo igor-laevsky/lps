@@ -98,9 +98,9 @@ def get_amounts_at_tick(tick_lower: int, tick_upper: int, liquidity: int, tick_c
     sa = tick_to_sqrt_price(tick_lower)
     sb = tick_to_sqrt_price(tick_upper)
 
-    if tick_current <= tick_lower:
+    if tick_current < tick_lower:
         return liquidity * (sb - sa) / (sa * sb), 0
-    elif tick_lower < tick_current < tick_upper:
+    elif tick_lower <= tick_current < tick_upper:
         return (
             liquidity * (sb - current_sqrt_price) / (current_sqrt_price * sb),
             liquidity * (current_sqrt_price - sa)

@@ -5,6 +5,7 @@ import attrs
 from eth_defi.token import TokenDetails
 from web3 import Web3
 from web3.contract import Contract
+from web3.types import BlockIdentifier
 
 from lps.contracts import create_contract_cached
 from lps.erc20 import fetch_erc20_details_cached, guess_is_stable_coin
@@ -33,7 +34,7 @@ class CLPoolInfo:
         observationCardinalityNext: int
         unlocked: bool
 
-    def get_slot0(self, _: Web3, block: str | int = 'latest') -> Slot0:
+    def get_slot0(self, _: Web3, block: BlockIdentifier = 'latest') -> Slot0:
         return self.Slot0(
             *self.contract.functions.slot0().call(block_identifier=block))
 
@@ -144,7 +145,9 @@ def _get_pool_info_cached(
     )
 
 @lru_cache(maxsize=256)
-def get_position_info_cached(w3: Web3, nft_id: int) -> PositionInfo:
+def get_position_info_cached(
+        w3: Web3, nft_id: int, block: BlockIdentifier = "latest") -> PositionInfo:
+
     aero_nft_manager = create_contract_cached(
         w3,
         address=get_config().aerodrome.nft_position_manager,
@@ -152,7 +155,7 @@ def get_position_info_cached(w3: Web3, nft_id: int) -> PositionInfo:
     )
 
     position_info = _RawNftPositionInfo(
-        *aero_nft_manager.functions.positions(nft_id).call())
+        *aero_nft_manager.functions.positions(nft_id).call(block_identifier=block))
 
     token0_details = fetch_erc20_details_cached(w3, position_info.token0)
     token1_details = fetch_erc20_details_cached(w3, position_info.token1)

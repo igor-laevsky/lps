@@ -18,7 +18,7 @@ _SYNONYMS = {
     'tBTC': 'BTC'
 }
 
-def canonic_symbol(symbol: str) -> str:
+def canonical_symbol(symbol: str) -> str:
     if symbol in _SYNONYMS:
         return _SYNONYMS[symbol]
     return symbol

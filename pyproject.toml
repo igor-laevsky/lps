@@ -21,6 +21,8 @@ ccxt = "^4.4.40"
 hyperliquid-python-sdk = "^0.9.0"
 dune-client = "^1.7.7"
 rusty-rlp = "^0.4.0"
+tabulate = "^0.9.0"
+humanize = "^4.11.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"

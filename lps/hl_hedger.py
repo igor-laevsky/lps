@@ -25,7 +25,7 @@ MIN_ORDER_USD = Decimal('10')
 def _get_hedge_symbol_for_token(token: TokenDetails) -> str:
     # Potentially account for closely correlated coins if we don't have
     # exact coin traded on the given perps exchange.
-    return erc20.canonic_symbol(token.symbol)
+    return erc20.canonical_symbol(token.symbol)
 
 def compute_hedges(positions: Iterable[Tuple[PositionInfo, int]]) -> dict[str, Decimal]:
     """
