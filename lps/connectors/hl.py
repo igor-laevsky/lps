@@ -1,4 +1,5 @@
 import logging
+import time
 from operator import itemgetter
 from typing import TypedDict, Iterator
 from decimal import Decimal
@@ -90,6 +91,44 @@ def round_sz(hl: HL, size: Decimal, name: str) -> Decimal:
     """
     return round(size, hl.sz_decimals[name])
 
+def _attempt_market_order(hl: HL, name: str, size: Decimal) -> Decimal:
+    """
+    Executes IoC order at best possible price. Returns actual executed size.
+    Exception only when something malfunctions in the connection itself.
+    """
+    logger.info(f'Posting order {name} {size}')
+
+    order = hl.exchange.market_open(
+        name=name,
+        is_buy=size > 0,
+        sz=float(abs(size)),
+        slippage=get_config().hyperliquid.market_order_slippage,
+    )
+    logger.info(f'Executed order: {order}')
+    executed_size = Decimal(order['response']['data']['statuses'][0]['filled']['totalSz'])
+    if executed_size != size:
+        logger.warning(f'Failed to execute full order {order}')
+    return executed_size
+
+def market_order(hl: HL, name: str, size: Decimal):
+    """
+    Exhaustively executes order but no more than max_retries attempts.
+    Exception if failed to execute.
+    """
+
+    retry_cnt = 0
+    while abs(size) > 0 and retry_cnt < get_config().hyperliquid.max_retries:
+        try:
+            executed_size = _attempt_market_order(hl, name, size)
+            if size < 0:
+                executed_size = -executed_size
+            size -= executed_size
+        except Exception as e:
+            logger.exception(f'Failed to execute order: {e} {retry_cnt}')
+        retry_cnt += 1
+    if size != 0:
+        raise HLException("Failed to execute the order")
+
 def adjust_position(hl: HL, name: str, from_size: Decimal, to_size: Decimal):
     """
     Note: from_size should equal to the current position size
@@ -99,27 +138,4 @@ def adjust_position(hl: HL, name: str, from_size: Decimal, to_size: Decimal):
     diff = round_sz(hl, to_size - from_size, name)
     if diff == 0:
         return
-
-    # TODO: Use exchange.order is it's going to be faster and cheaper
-    retry_cnt = 0
-    while retry_cnt < get_config().hyperliquid.max_retries:
-        try:
-            sz = float(abs(diff))
-            logger.info(f'Posting order {name} {diff} {sz}')
-            order = hl.exchange.market_open(
-                name=name,
-                is_buy=diff > 0,
-                sz=sz,
-                slippage=get_config().hyperliquid.market_order_slippage,
-            )
-            logger.info(f'Executed order: {order}')
-            if order['response']['data']['statuses'][0]['filled']['totalSz'] != str(sz):
-                # TODO: Execute remaining amount
-                # For now it's fine because we will re-execute on the next hedging update
-                logger.warning(f'Failed to execute full order {order}')
-            return
-        except Exception as e:
-            logger.exception(f'Failed to execute order: {e} {retry_cnt}')
-            retry_cnt += 1
-            continue
-    raise HLException("Failed to execute the order")
+    market_order(hl, name, diff) # exception on failure

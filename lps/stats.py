@@ -69,7 +69,33 @@ def get_all_position_mints(w3: Web3, user_addr: str) -> Iterator[MintInfo]:
 
     yield from map(
         lambda log: MintInfo(token_id=log['args']['tokenId'],
-                           block_number=log['blockNumber']),
+                             block_number=log['blockNumber']),
+        filter.get_all_entries())
+
+@attrs.frozen
+class BurnInfo:
+    token_id: int
+    block_number: int
+
+def get_all_position_burns(w3: Web3, user_addr: str) -> Iterator[BurnInfo]:
+    """
+    Returns list of position burns for the given user
+    """
+    aero_nft_manager = create_contract_cached(
+        w3, "aerodrome_nft_manager.json")
+
+    # Transfer from zero is a mint
+    filter = aero_nft_manager.events.Transfer.create_filter(
+        fromBlock="earliest",
+        argument_filters={
+            'from': Web3.to_checksum_address(user_addr),
+            'to': Web3.to_checksum_address('0x0000000000000000000000000000000000000000')
+        }
+    )
+
+    yield from map(
+        lambda log: BurnInfo(token_id=log['args']['tokenId'],
+                             block_number=log['blockNumber']),
         filter.get_all_entries())
 
 @attrs.frozen
@@ -78,7 +104,7 @@ class ClaimInfo:
     amount_usd: Decimal
     token_id: int
 
-def get_token_id_from_vfat_harvest_transaction(w3: Web3, tr: TxData) -> int:
+def _get_token_id_from_vfat_harvest_transaction(w3: Web3, tr: TxData) -> int:
     nft_farm_strategy_v2 = create_contract_cached(w3, "vfat_nft_farm_strategy_v2.json")
     nft_farm_strategy_v1 = create_contract_cached(w3, "vfat_nft_farm_strategy_v1.json")
 
@@ -116,7 +142,7 @@ def get_all_claim_rewards(w3: Web3, user_addr: str) -> Iterator[ClaimInfo]:
             a_binance, reward_token, log['args']['amount'], block['timestamp'])
 
         return ClaimInfo(
-            token_id = get_token_id_from_vfat_harvest_transaction(w3, tr),
+            token_id = _get_token_id_from_vfat_harvest_transaction(w3, tr),
             amount_usd = amount_usd,
             timestamp_sec = int(block['timestamp'])
         )
@@ -127,33 +153,85 @@ def print_position_info(
         w3: Web3,
         pos: aerodrome.PositionInfo,
         claims: Iterable[ClaimInfo],
-        mint: MintInfo):
+        mint: MintInfo,
+        burn: BurnInfo | None):
 
-    minted_timestamp_sec = w3.eth.get_block(mint.block_number)['timestamp']
+    minted_block_number = mint.block_number
+    burned_block_number = burn.block_number if burn else 'finalized'
+
+    minted_timestamp_sec = w3.eth.get_block(minted_block_number)['timestamp']
+    burned_timestamp_sec = w3.eth.get_block(burned_block_number)['timestamp']
+
     age = \
         datetime.now() - datetime.fromtimestamp(minted_timestamp_sec)
+    age_sec = age.total_seconds()
     age_str = humanize.naturaldelta(age)
 
     total_rewards_usd = sum(map(attrgetter('amount_usd'), claims))
 
-    def get_usd_value_at_tick(tick: int):
+    def get_usd_value_at_tick(tick: int, timestamp_sec: int):
         (amount0, amount1) = v3_math.get_amounts_at_tick(
             pos.tick_lower, pos.tick_upper, pos.liquidity, tick)
         amount0_usd = binance.token_value_in_usd_at_time(
-            a_binance, pos.pool.token0, amount0, minted_timestamp_sec)
+            a_binance, pos.pool.token0, amount0, timestamp_sec)
         amount1_usd = binance.token_value_in_usd_at_time(
-            a_binance, pos.pool.token1, amount1, minted_timestamp_sec)
+            a_binance, pos.pool.token1, amount1, timestamp_sec)
         return amount0_usd + amount1_usd
 
-    tick_at_mint = pos.pool.get_slot0(w3, block=mint.block_number).tick
-    deposit_usd = get_usd_value_at_tick(tick_at_mint)
+    tick_at_mint = pos.pool.get_slot0(w3, block=minted_block_number).tick
+    deposit_usd = get_usd_value_at_tick(tick_at_mint, minted_timestamp_sec)
+    price_at_mint = v3_math.tick_to_price(tick_at_mint)
+
+    tick_at_burn = pos.pool.get_slot0(w3, block=burned_block_number).tick
+    burn_usd = get_usd_value_at_tick(tick_at_burn, burned_timestamp_sec)
+    price_at_burn = v3_math.tick_to_price(tick_at_burn)
+
+    (deposit0_raw, deposit1_raw) = v3_math.get_amounts_at_tick(
+            pos.tick_lower, pos.tick_upper, pos.liquidity, tick_at_mint)
+    deposit0 = pos.pool.token0.convert_to_decimals(deposit0_raw)
+    deposit0_usd = binance.token_value_in_usd_at_time(
+        a_binance, pos.pool.token0, deposit0_raw, minted_timestamp_sec)
+
+    deposit1 = pos.pool.token0.convert_to_decimals(deposit1_raw)
+    deposit1_usd = binance.token_value_in_usd_at_time(
+        a_binance, pos.pool.token1, deposit1_raw, minted_timestamp_sec)
+
+    deposit0_price_usd = binance.usd_price_at_time(
+        a_binance, pos.pool.token0.symbol, minted_timestamp_sec)
+    deposit1_price_usd = binance.usd_price_at_time(
+        a_binance, pos.pool.token1.symbol, minted_timestamp_sec)
+
+    (burn0_raw, burn1_raw) = v3_math.get_amounts_at_tick(
+            pos.tick_lower, pos.tick_upper, pos.liquidity, tick_at_burn)
+    burn0 = pos.pool.token0.convert_to_decimals(burn0_raw)
+    burn0_usd = binance.token_value_in_usd_at_time(
+        a_binance, pos.pool.token0, burn0_raw, burned_timestamp_sec)
+
+    burn1 = pos.pool.token0.convert_to_decimals(burn1_raw)
+    burn1_usd = binance.token_value_in_usd_at_time(
+        a_binance, pos.pool.token1, burn1_raw, burned_timestamp_sec)
+
+    burn0_price_usd = binance.usd_price_at_time(
+        a_binance, pos.pool.token0.symbol, burned_timestamp_sec)
+    burn1_price_usd = binance.usd_price_at_time(
+        a_binance, pos.pool.token1.symbol, burned_timestamp_sec)
+
+    # Asset change in USD
+    # Avg. Fee per day in USD
+    # Total fee
 
     print(
-        f"ID: {pos.nft_id}\tPool: {pos.pool.token0.symbol}/{pos.pool.token1.symbol}\tAge: {age_str}\tFees:{total_rewards_usd:.2f}$\tDeposit {deposit_usd:.2f}$"
+        f"ID: {pos.nft_id}\tPool: {pos.pool.token0.symbol}/{pos.pool.token1.symbol}\tAge: {age_str}\tFees: {total_rewards_usd:.2f}$"
     )
-
+    print(f'Price at mint: {price_at_mint}')
+    print(f'Price at burn: {price_at_burn}')
+    print(f'Deposited: {deposit_usd:.2f}$ ({deposit0:.4f}, {deposit1:.4f}) ({deposit0_usd:.2f}$, {deposit1_usd:.2f}$) ({deposit0_price_usd:.2f}$ {deposit1_price_usd:.2f}$)')
+    print(f'Withdrawn: {burn_usd:.2f}$ ({burn0:.4f}, {burn1:.4f}) ({burn0_usd:.2f}$, {burn1_usd:.2f}$) ({burn0_price_usd:.2f}$ {burn1_price_usd:.2f}$)')
+    print('Closed' if burn else 'Opened')
 
 mints = list(get_all_position_mints(w3, '0x84fcd2463483e8f8dc4190c65679592f2358c314'))
+burns = list(get_all_position_burns(w3, '0x84fcd2463483e8f8dc4190c65679592f2358c314'))
+
 position_infos = list(map(
     lambda m: aerodrome.get_position_info_cached(w3, m.token_id, block=m.block_number),
     mints))
@@ -164,5 +242,14 @@ claims_by_token_id = defaultdict(list)
 for claim in all_claims:
     claims_by_token_id[claim.token_id].append(claim)
 
+burns_by_id = {}
+for burn in burns:
+    assert burn.token_id not in burns_by_id
+    burns_by_id[burn.token_id] = burn
+
+print(burns)
+print(mints)
+
 for pos, mint in zip(position_infos, mints):
-    print_position_info(w3, pos, claims_by_token_id[pos.nft_id], mint)
+    print_position_info(w3, pos, claims_by_token_id[pos.nft_id], mint, burns_by_id.get(pos.nft_id, None))
+    print()

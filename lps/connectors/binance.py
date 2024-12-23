@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from eth_defi.token import TokenDetails
 
-import erc20
+from lps import erc20
 from lps.utils.config import get_config
 
 logger = logging.getLogger('binance')
@@ -46,7 +46,7 @@ def usd_price_at_time(client: Binance, base: str, timestamp_sec: int) -> Decimal
     """
     Note: not super precise but good for user interface
     """
-
+    base = erc20.canonical_symbol(base) # TODO: doesn't belong here
     timestamp_ms = timestamp_sec * 1000
     response = client.exchange.fetch_ohlcv(f'{base}/USDT', '1m', timestamp_ms, 1)
 
