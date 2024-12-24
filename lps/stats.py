@@ -216,40 +216,48 @@ def print_position_info(
     burn1_price_usd = binance.usd_price_at_time(
         a_binance, pos.pool.token1.symbol, burned_timestamp_sec)
 
+    avg_fees_per_day = (total_rewards_usd / Decimal(age_sec)) * (24 * 60 * 60)
+
     # Asset change in USD
-    # Avg. Fee per day in USD
-    # Total fee
 
     print(
         f"ID: {pos.nft_id}\tPool: {pos.pool.token0.symbol}/{pos.pool.token1.symbol}\tAge: {age_str}\tFees: {total_rewards_usd:.2f}$"
     )
-    print(f'Price at mint: {price_at_mint}')
-    print(f'Price at burn: {price_at_burn}')
+    print(f'Avg fees per day: {avg_fees_per_day:.2f}')
+    print(f'Price at mint: {price_at_mint:.5f}')
+    print(f'Price at burn: {price_at_burn:.5f}')
     print(f'Deposited: {deposit_usd:.2f}$ ({deposit0:.4f}, {deposit1:.4f}) ({deposit0_usd:.2f}$, {deposit1_usd:.2f}$) ({deposit0_price_usd:.2f}$ {deposit1_price_usd:.2f}$)')
     print(f'Withdrawn: {burn_usd:.2f}$ ({burn0:.4f}, {burn1:.4f}) ({burn0_usd:.2f}$, {burn1_usd:.2f}$) ({burn0_price_usd:.2f}$ {burn1_price_usd:.2f}$)')
     print('Closed' if burn else 'Opened')
 
-mints = list(get_all_position_mints(w3, '0x84fcd2463483e8f8dc4190c65679592f2358c314'))
-burns = list(get_all_position_burns(w3, '0x84fcd2463483e8f8dc4190c65679592f2358c314'))
+def main():
+    user_addr = sys.argv[1]
 
-position_infos = list(map(
-    lambda m: aerodrome.get_position_info_cached(w3, m.token_id, block=m.block_number),
-    mints))
+    mints = list(get_all_position_mints(w3, user_addr))
+    burns = list(get_all_position_burns(w3, user_addr))
+    all_claims = list(get_all_claim_rewards(w3, user_addr))
 
-all_claims = list(get_all_claim_rewards(w3, '0x84fcd2463483e8f8dc4190c65679592f2358c314'))
+    print(burns)
+    print(mints)
 
-claims_by_token_id = defaultdict(list)
-for claim in all_claims:
-    claims_by_token_id[claim.token_id].append(claim)
+    position_infos = list(map(
+        lambda m: aerodrome.get_position_info_cached(w3, m.token_id, block=m.block_number),
+        mints))
 
-burns_by_id = {}
-for burn in burns:
-    assert burn.token_id not in burns_by_id
-    burns_by_id[burn.token_id] = burn
+    claims_by_token_id = defaultdict(list)
+    for claim in all_claims:
+        claims_by_token_id[claim.token_id].append(claim)
 
-print(burns)
-print(mints)
+    burns_by_id = {}
+    for burn in burns:
+        assert burn.token_id not in burns_by_id
+        burns_by_id[burn.token_id] = burn
 
-for pos, mint in zip(position_infos, mints):
-    print_position_info(w3, pos, claims_by_token_id[pos.nft_id], mint, burns_by_id.get(pos.nft_id, None))
-    print()
+    for pos, mint in zip(position_infos, mints):
+        # if burns_by_id.get(pos.nft_id, None) is not None:
+        #     continue # skip closed for now
+        print_position_info(w3, pos, claims_by_token_id[pos.nft_id], mint, burns_by_id.get(pos.nft_id, None))
+        print()
+
+if __name__ == "__main__":
+    main()

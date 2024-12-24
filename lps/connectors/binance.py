@@ -50,6 +50,9 @@ def usd_price_at_time(client: Binance, base: str, timestamp_sec: int) -> Decimal
     timestamp_ms = timestamp_sec * 1000
     response = client.exchange.fetch_ohlcv(f'{base}/USDT', '1m', timestamp_ms, 1)
 
+    if len(response) < 1:
+        return Decimal(0) # TODO: I don't know why this can happen
+
     return Decimal(response[0][3]) # lowest value in one minute
 
 def token_value_in_usd_at_time(

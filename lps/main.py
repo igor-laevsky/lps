@@ -39,7 +39,7 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Load position info
-    tracked_position_ids = (4374315,)
+    tracked_position_ids = (4516228,)
     tracked_positions = []
     for pos in tracked_position_ids:
         pos = get_position_info_cached(w3, pos)
@@ -50,20 +50,19 @@ def main():
         # block = w3.eth.get_block('latest')
         # logger.info(f'Current block: {block["number"]} '
         #             f'delay {time.time() - block["timestamp"]:.2f}s')
-        block_number = w3.eth.get_block_number('latest')
+        block_number = w3.eth.get_block_number()
 
         try:
             ticks = list(
                 map(lambda pos: pos.pool.get_slot0(w3, block=block_number).tick,
                     tracked_positions))
-            logger.info(f'Current ticks: {ticks}')
 
             hedges = hl_hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
             adjustments = hl_hedger.compute_hedge_adjustments(a_hl, hedges)
             updated_cnt = hl_hedger.execute_hedge_adjustements(a_hl, adjustments)
 
             if len(adjustments) > 0:
-                logger.info(f"{block_number} {ticks} {hedges} {adjustments} {updated_cnt}")
+                logger.info(f"{block_number} {ticks} {dict(hedges)} {dict(adjustments)} {updated_cnt}")
         except Exception:
             logger.exception('Failed somewhere')
             logger.warning('Re-creating all connections in 10 seconds')
