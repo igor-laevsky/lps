@@ -13,7 +13,7 @@ import time
 
 from lps.aerodrome import get_position_info_cached, clear_caches
 from lps.connectors import hl
-from lps import hl_hedger, erc20
+from lps import hedger, erc20
 
 from eth_defi.event_reader.block_time import measure_block_time
 
@@ -39,7 +39,7 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Load position info
-    tracked_position_ids = (4516228,)
+    tracked_position_ids = (4642077,)
     tracked_positions = []
     for pos in tracked_position_ids:
         pos = get_position_info_cached(w3, pos)
@@ -57,9 +57,9 @@ def main():
                 map(lambda pos: pos.pool.get_slot0(w3, block=block_number).tick,
                     tracked_positions))
 
-            hedges = hl_hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
-            adjustments = hl_hedger.compute_hedge_adjustments(a_hl, hedges)
-            updated_cnt = hl_hedger.execute_hedge_adjustements(a_hl, adjustments)
+            hedges = hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
+            adjustments = hedger.compute_hedge_adjustments(a_hl, hedges)
+            updated_cnt = hedger.execute_hedge_adjustements(a_hl, adjustments)
 
             if len(adjustments) > 0:
                 logger.info(f"{block_number} {ticks} {dict(hedges)} {dict(adjustments)} {updated_cnt}")
@@ -79,6 +79,7 @@ def main():
                     logger.exception("Failed while re-creating connections")
                     logger.warning("Retrying in 10 seconds")
                     continue
+        time.sleep(block_time_sec)
 
         # CEX->DEX price diff
         # ticks = []
@@ -97,7 +98,6 @@ def main():
         #     if diff > pos.pool.fee_pips / 10000:
         #         logger.warning('CEX<->DEX price arbitrage possibility')
 
-        time.sleep(block_time_sec)
 
     # aero_nft_manager = get_deployed_contract(
     #     w3,

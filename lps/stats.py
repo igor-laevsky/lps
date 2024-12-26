@@ -165,7 +165,8 @@ def print_position_info(
     age = \
         datetime.now() - datetime.fromtimestamp(minted_timestamp_sec)
     age_sec = age.total_seconds()
-    age_str = humanize.naturaldelta(age)
+    age_str = humanize.precisedelta(
+        age, suppress=['minutes', 'seconds', 'milliseconds', 'microseconds'])
 
     total_rewards_usd = sum(map(attrgetter('amount_usd'), claims))
 
@@ -220,9 +221,14 @@ def print_position_info(
 
     # Asset change in USD
 
+    lower_price = v3_math.tick_to_price(pos.tick_lower)
+    upper_price = v3_math.tick_to_price(pos.tick_upper)
+    width = Decimal(abs(pos.tick_lower - pos.tick_upper)) * v3_math.TICK_BASE / 100
+
     print(
         f"ID: {pos.nft_id}\tPool: {pos.pool.token0.symbol}/{pos.pool.token1.symbol}\tAge: {age_str}\tFees: {total_rewards_usd:.2f}$"
     )
+    print(f'Range: ({lower_price:.6f}) <---> ({upper_price:.6f}) {width:.2f}%')
     print(f'Avg fees per day: {avg_fees_per_day:.2f}')
     print(f'Price at mint: {price_at_mint:.5f}')
     print(f'Price at burn: {price_at_burn:.5f}')

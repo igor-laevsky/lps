@@ -10,6 +10,8 @@ from decimal import Decimal
 
 from eth_defi.token import TokenDetails
 
+import connectors
+from connectors.abs import HasAssetPositions, CanDoOrders
 from lps import erc20
 from lps.aerodrome import PositionInfo
 from lps.connectors import hl
@@ -47,19 +49,20 @@ def compute_hedges(positions: Iterable[Tuple[PositionInfo, int]]) -> dict[str, D
     logger.debug(f'Optimal hedge sizes: {ret}')
     return ret
 
-def compute_hedge_adjustments(a_hl: HL, optimal_hedges: dict[str, Decimal]) -> dict[str, (Decimal, Decimal)]:
+def compute_hedge_adjustments(
+        conn: HasAssetPositions,
+        optimal_hedges: dict[str, Decimal]) -> dict[str, (Decimal, Decimal)]:
     """
     Given map (symbol -> optimal hedge size), compute map:
         symbol -> (old position size, new position size)
     Remove positions that don't need to be updated.
-    TODO: Better to remove dependency on hl_connector and just accept plain data
     """
-    positions = hl.get_user_positions(a_hl)
-    mids = hl.get_mid_prices(a_hl, *optimal_hedges.keys())
+    positions = conn.get_user_positions()
+    mids = conn.get_mid_prices(*optimal_hedges.keys())
 
     ret: dict[str, (Decimal, Decimal)] = {}
     for symbol, optimal_hedge_size in optimal_hedges.items():
-        current_hedge_size_sign = Decimal(positions[symbol]['szi']) \
+        current_hedge_size_sign = positions[symbol].szi \
                 if symbol in positions \
                 else 0
         current_hedge_size = abs(current_hedge_size_sign)
@@ -89,11 +92,12 @@ def compute_hedge_adjustments(a_hl: HL, optimal_hedges: dict[str, Decimal]) -> d
 
     return ret
 
-def execute_hedge_adjustements(a_hl: HL, hedge_adjustements: dict[str, (Decimal, Decimal)]) -> int:
+def execute_hedge_adjustements(
+        conn: CanDoOrders, hedge_adjustements: dict[str, (Decimal, Decimal)]) -> int:
     """
     Executes orders to adjust hedges according to the input map:
         symbol -> (old position size, new position size)
-    TODO: Move this into connector `adjust_positions`
+    TODO: Move this into connector.abs
     """
 
     if len(hedge_adjustements) > 0:
@@ -105,7 +109,8 @@ def execute_hedge_adjustements(a_hl: HL, hedge_adjustements: dict[str, (Decimal,
         assert old_position_size <= 0, 'always shorting'
         assert new_position_size <= 0, 'always shorting'
         try:
-            hl.adjust_position(a_hl, symbol, old_position_size, new_position_size)
+            connectors.abs.adjust_position(
+                conn, symbol, old_position_size, new_position_size)
             updated_count += 1
         except hl.HLException:
             logger.warning(f'Failed to update hedge position {symbol, old_position_size, new_position_size}')
