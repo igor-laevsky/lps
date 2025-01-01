@@ -39,7 +39,7 @@ def main():
     signal.signal(signal.SIGTERM, stop)
 
     # Load position info
-    tracked_position_ids = (4642077,)
+    tracked_position_ids = (4823882,)
     tracked_positions = []
     for pos in tracked_position_ids:
         pos = get_position_info_cached(w3, pos)
@@ -57,7 +57,9 @@ def main():
                 map(lambda pos: pos.pool.get_slot0(w3, block=block_number).tick,
                     tracked_positions))
 
-            hedges = hedger.compute_hedges(zip(tracked_positions, ticks, strict=True))
+            hedges = hedger.compute_hedges_fixed_step(
+                zip(tracked_positions, ticks, strict=True),
+                threshold=300)
             adjustments = hedger.compute_hedge_adjustments(a_hl, hedges)
             updated_cnt = hedger.execute_hedge_adjustements(a_hl, adjustments)
 

@@ -28,7 +28,7 @@ import time
 from lps.aerodrome import get_position_info_cached, clear_caches
 from lps.connectors import hl
 from lps.utils import v3_math
-from lps import hl_hedger, erc20
+from lps import hedger, erc20
 
 import requests
 from decimal import Decimal
@@ -61,6 +61,7 @@ def get_all_position_mints(w3: Web3, user_addr: str) -> Iterator[MintInfo]:
     # Transfer from zero is a mint
     filter = aero_nft_manager.events.Transfer.create_filter(
         fromBlock="earliest",
+        address=get_config().aerodrome.nft_position_manager,
         argument_filters={
             'from': Web3.to_checksum_address('0x0000000000000000000000000000000000000000'),
             'to': Web3.to_checksum_address(user_addr)
@@ -87,6 +88,7 @@ def get_all_position_burns(w3: Web3, user_addr: str) -> Iterator[BurnInfo]:
     # Transfer from zero is a mint
     filter = aero_nft_manager.events.Transfer.create_filter(
         fromBlock="earliest",
+        address=get_config().aerodrome.nft_position_manager,
         argument_filters={
             'from': Web3.to_checksum_address(user_addr),
             'to': Web3.to_checksum_address('0x0000000000000000000000000000000000000000')
@@ -104,18 +106,24 @@ class ClaimInfo:
     amount_usd: Decimal
     token_id: int
 
-def _get_token_id_from_vfat_harvest_transaction(w3: Web3, tr: TxData) -> int:
+def _get_token_id_from_harvest_transaction(w3: Web3, tr: TxData) -> int:
     nft_farm_strategy_v2 = create_contract_cached(w3, "vfat_nft_farm_strategy_v2.json")
     nft_farm_strategy_v1 = create_contract_cached(w3, "vfat_nft_farm_strategy_v1.json")
+    aero_cl_gauge = create_contract_cached(w3, "aerodrome_cl_gauge.json")
 
-    try:
-        (func, args) = nft_farm_strategy_v2.decode_function_input(tr['input'])
-    except ValueError:
-        (func, args) = nft_farm_strategy_v1.decode_function_input(tr['input'])
+    for contract in (nft_farm_strategy_v2, nft_farm_strategy_v1, aero_cl_gauge):
+        try:
+            (func, args) = contract.decode_function_input(tr['input'])
+        except ValueError:
+            continue
 
-    assert func.fn_name in ('harvest', 'exit'), f"not a vfat transaction {tr['hash']}"
-
-    return args['position']['tokenId']
+        if func.fn_name in ('harvest', 'exit'):
+            return args['position']['tokenId']
+        elif func.fn_name in ('getReward', 'withdraw'):
+            return args['tokenId']
+        else:
+            assert False, f"unrecognized func name shouldn't happen {tr['hash'].hex()} {func.fn_name}"
+    raise Exception(f"Unrecognized claim rewards transaction {tr['hash'].hex()}")
 
 def get_all_claim_rewards(w3: Web3, user_addr: str) -> Iterator[ClaimInfo]:
     """
@@ -142,7 +150,7 @@ def get_all_claim_rewards(w3: Web3, user_addr: str) -> Iterator[ClaimInfo]:
             a_binance, reward_token, log['args']['amount'], block['timestamp'])
 
         return ClaimInfo(
-            token_id = _get_token_id_from_vfat_harvest_transaction(w3, tr),
+            token_id = _get_token_id_from_harvest_transaction(w3, tr),
             amount_usd = amount_usd,
             timestamp_sec = int(block['timestamp'])
         )
@@ -223,13 +231,18 @@ def print_position_info(
 
     lower_price = v3_math.tick_to_price(pos.tick_lower)
     upper_price = v3_math.tick_to_price(pos.tick_upper)
+    burned_price = v3_math.tick_to_price(tick_at_burn)
     width = Decimal(abs(pos.tick_lower - pos.tick_upper)) * v3_math.TICK_BASE / 100
+
+    range_status = 'In range'
+    if not pos.tick_lower <= tick_at_burn < pos.tick_upper:
+        range_status = 'Out of range!'
 
     print(
         f"ID: {pos.nft_id}\tPool: {pos.pool.token0.symbol}/{pos.pool.token1.symbol}\tAge: {age_str}\tFees: {total_rewards_usd:.2f}$"
     )
-    print(f'Range: ({lower_price:.6f}) <---> ({upper_price:.6f}) {width:.2f}%')
-    print(f'Avg fees per day: {avg_fees_per_day:.2f}')
+    print(f'Range: ({lower_price:.6f}) <-- ({burned_price:.6f}) --> ({upper_price:.6f}) {width:.2f}% ({range_status})')
+    print(f'Avg fees per day: {avg_fees_per_day:.2f}$ {(avg_fees_per_day / deposit_usd) * 100:.2f}%')
     print(f'Price at mint: {price_at_mint:.5f}')
     print(f'Price at burn: {price_at_burn:.5f}')
     print(f'Deposited: {deposit_usd:.2f}$ ({deposit0:.4f}, {deposit1:.4f}) ({deposit0_usd:.2f}$, {deposit1_usd:.2f}$) ({deposit0_price_usd:.2f}$ {deposit1_price_usd:.2f}$)')

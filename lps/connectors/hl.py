@@ -13,7 +13,7 @@ from hyperliquid.utils import constants
 from hyperliquid.utils.types import Meta
 from overrides import overrides
 
-from connectors.abs import CanDoOrders, HasAssetPositions, AssetPosition, \
+from lps.connectors.abs import CanDoOrders, HasAssetPositions, AssetPosition, \
     ConnectorException
 from lps.utils.config import get_config
 

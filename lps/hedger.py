@@ -10,8 +10,8 @@ from decimal import Decimal
 
 from eth_defi.token import TokenDetails
 
-import connectors
-from connectors.abs import HasAssetPositions, CanDoOrders
+from lps import connectors
+from lps.connectors.abs import HasAssetPositions, CanDoOrders
 from lps import erc20
 from lps.aerodrome import PositionInfo
 from lps.connectors import hl
@@ -48,6 +48,104 @@ def compute_hedges(positions: Iterable[Tuple[PositionInfo, int]]) -> dict[str, D
 
     logger.debug(f'Optimal hedge sizes: {ret}')
     return ret
+
+def compute_hedges_50_50(positions: Iterable[Tuple[PositionInfo, int]]) -> dict[str, Decimal]:
+    """
+    Always hedges 50/50
+    """
+    ret: dict[str, Decimal] = defaultdict(Decimal)
+    for pos, tick in positions:
+        middle_tick = (pos.tick_upper + pos.tick_lower) // 2
+        (amount0, amount1) = v3_math.get_amounts_at_tick(
+            pos.tick_lower, pos.tick_upper, pos.liquidity, middle_tick)
+        if not erc20.guess_is_stable_coin(pos.token0):
+            ret[_get_hedge_symbol_for_token(pos.token0)] += \
+                pos.token0.convert_to_decimals(amount0)
+        if not erc20.guess_is_stable_coin(pos.token1):
+            ret[_get_hedge_symbol_for_token(pos.token1)] += \
+                pos.token1.convert_to_decimals(amount1)
+
+    logger.debug(f'Optimal hedge sizes: {ret}')
+    return ret
+
+def compute_hedges_fixed_step(positions: Iterable[Tuple[PositionInfo, int]], threshold: int = 0) -> dict[str, Decimal]:
+    ret: dict[str, Decimal] = defaultdict(Decimal)
+    for pos, tick in positions:
+        width = pos.tick_upper - pos.tick_lower
+
+        hedge_lines = [
+            pos.tick_lower,
+            pos.tick_lower + int(width / 2),
+            pos.tick_upper
+        ]
+
+        boundaries = [
+            pos.tick_lower,
+            pos.tick_upper,
+            ]
+
+        i = 0
+        while i < len(boundaries) and boundaries[i] < tick:
+            i += 1
+
+        # If we are on the edge, just do nothing
+        # Not emiting anything for the hedge means that we will not check it at all
+        if i >= 1 and abs(boundaries[i - 1] - tick) < threshold:
+            continue
+        if i < len(boundaries) and abs(boundaries[i] - tick) < threshold:
+            continue
+
+        cur_line = hedge_lines[i]
+
+        (amount0, amount1) = v3_math.get_amounts_at_tick(
+            pos.tick_lower, pos.tick_upper, pos.liquidity, cur_line)
+        if not erc20.guess_is_stable_coin(pos.token0):
+            ret[_get_hedge_symbol_for_token(pos.token0)] += \
+                pos.token0.convert_to_decimals(amount0)
+        if not erc20.guess_is_stable_coin(pos.token1):
+            ret[_get_hedge_symbol_for_token(pos.token1)] += \
+                pos.token1.convert_to_decimals(amount1)
+
+    logger.debug(f'Optimal hedge sizes: {ret}')
+    return ret
+
+def compute_hedges_4_step(positions: Iterable[Tuple[PositionInfo, int]]) -> dict[str, Decimal]:
+    ret: dict[str, Decimal] = defaultdict(Decimal)
+    for pos, tick in positions:
+        width = pos.tick_upper - pos.tick_lower
+
+        hedge_lines = [
+            pos.tick_lower,
+            pos.tick_lower + 1 * int(width / 4),
+            pos.tick_lower + 2 * int(width / 4),
+            pos.tick_lower + 3 * int(width / 4),
+            pos.tick_upper
+        ]
+
+        boundaries = [
+            pos.tick_lower,
+            pos.tick_lower + int(width / 3),
+            pos.tick_lower + 2 * int(width / 3),
+            pos.tick_upper,
+            ]
+
+        i = 0
+        while i < len(boundaries) and boundaries[i] < tick:
+            i += 1
+        cur_line = hedge_lines[i]
+
+        (amount0, amount1) = v3_math.get_amounts_at_tick(
+            pos.tick_lower, pos.tick_upper, pos.liquidity, cur_line)
+        if not erc20.guess_is_stable_coin(pos.token0):
+            ret[_get_hedge_symbol_for_token(pos.token0)] += \
+                pos.token0.convert_to_decimals(amount0)
+        if not erc20.guess_is_stable_coin(pos.token1):
+            ret[_get_hedge_symbol_for_token(pos.token1)] += \
+                pos.token1.convert_to_decimals(amount1)
+
+    logger.debug(f'Optimal hedge sizes: {ret}')
+    return ret
+
 
 def compute_hedge_adjustments(
         conn: HasAssetPositions,

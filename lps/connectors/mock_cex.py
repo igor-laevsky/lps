@@ -2,7 +2,7 @@ from collections import defaultdict
 
 import attrs
 
-from connectors.abs import AssetPosition, ConnectorException
+from lps.connectors.abs import AssetPosition, ConnectorException
 from decimal import Decimal
 
 class MockConnectorError(ConnectorException):
@@ -27,6 +27,13 @@ class MockCEX:
                 szi=size
             ) for name, size in self.position_sizes.items() if size != 0
         }
+
+    def get_total_balance(self):
+        """Returns total usd balance if all positions will be closed now"""
+        total_pos = sum(
+            [self.mids[name] * size
+             for name, size in self.position_sizes.items()])
+        return total_pos + self.usd_balance
 
     def market_order(self, name: str, size: Decimal):
         is_buy = True if size > 0 else False
