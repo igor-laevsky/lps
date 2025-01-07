@@ -1,4 +1,4 @@
-### A collection for LP
+### Tools for liquidity providers
 
 Some tools for hopefully profitable liquidity providing on uniswap clones. 
 
