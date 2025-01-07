@@ -1,4 +1,4 @@
-### Tools for liquidity providers
+### Tools for liquidity providers (uniswap, aerodrome and their forks)
 
 - Dynamic delta-hedger with perps on hyperliquid
 - Black-Scholes position simulator
