@@ -2,6 +2,6 @@
 
 - Dynamic delta-hedger with perps on hyperliquid
 - Black-Scholes position simulator
-- Perfoamance nalysis for the open and historical positions
+- Performance analysis for the open and historical positions
 
 A bit of a mess, use at your own risk.
