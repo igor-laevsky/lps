@@ -47,10 +47,11 @@ def main():
         rich.print(pos)
 
     while is_running:
-        # block = w3.eth.get_block('latest')
-        # logger.info(f'Current block: {block["number"]} '
-        #             f'delay {time.time() - block["timestamp"]:.2f}s')
-        block_number = w3.eth.get_block_number()
+        block = w3.eth.get_block('latest')
+        logger.info(f'Current block: {block["number"]} '
+                    f'delay {time.time() - block["timestamp"]:.2f}s')
+        block_number = block['number']
+        #block_number = w3.eth.get_block_number()
 
         try:
             ticks = list(
